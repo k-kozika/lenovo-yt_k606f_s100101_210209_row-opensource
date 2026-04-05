@@ -1,0 +1,78 @@
+name: Build Linux Kernel
+
+
+on:
+  workflow_dispatch:
+    inputs:
+      project:
+        description: 'Project name'
+        required: false
+        default: 'bladex_row_wifi'
+        type: choice
+        options:
+          - bladex_row_wifi
+          - pearl_row_lte
+
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6.0.2
+
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential \
+            bc \
+            bison \
+            flex \
+            gcc-arm-linux-gnueabihf \
+            gcc-aarch64-linux-gnu \
+            libncurses-dev \
+            libssl-dev \
+            libelf-dev \
+            wget \
+            curl \
+            git \
+            cpio \
+            rsync \
+            python3
+
+
+      - name: Display build information
+        run: |
+          echo "Project: ${{ github.event.inputs.project }}"
+          echo "Kernel source directory: kernel/msm-4.19"
+          gcc --version
+          aarch64-linux-gnu-gcc --version
+          make --version
+          
+      - name: Build kernel
+        run: |
+          chmod +x kernel_build.sh
+          PROJECT="${{ github.event.inputs.project }}" ./kernel_build.sh
+        env:
+          MAKEFLAGS: '-j4'  # Adjust for runner's CPU count
+
+
+      - name: Upload kernel image
+        if: always()
+        uses: actions/upload-artifact@v7.0.0
+        with:
+          name: kernel-image
+          path: out/target/product/${{ github.event.inputs.project }}/obj/KERNEL_OBJ/arch/arm64/boot/Image
+          retention-days: 30
+
+
+      - name: Upload build logs
+        if: failure()
+        uses: actions/upload-artifact@v7.0.0
+        with:
+          name: build-logs
+          path: out/
+          retention-days: 7
