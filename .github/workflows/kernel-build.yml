@@ -1,6 +1,5 @@
 name: Build Linux Kernel
 
-
 on:
   workflow_dispatch:
     inputs:
@@ -13,15 +12,13 @@ on:
           - bladex_row_wifi
           - pearl_row_lte
 
-
 jobs:
   build:
     runs-on: ubuntu-latest
-    
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v6.0.2
-
 
       - name: Install build dependencies
         run: |
@@ -41,8 +38,23 @@ jobs:
             git \
             cpio \
             rsync \
-            python3
+            python3 \
+            ccache
 
+      - name: Restore ccache
+        uses: actions/cache@v5.0.4
+        with:
+          path: ~/.ccache
+          key: ccache-${{ github.ref }}-${{ github.sha }}
+          restore-keys: |
+            ccache-${{ github.ref }}-
+
+      - name: Configure ccache
+        run: |
+          ccache --set-config=max_size=2G
+          ccache --set-config=compression=true
+          ccache --set-config=compression_level=6
+          ccache -z  # Reset statistics
 
       - name: Display build information
         run: |
@@ -51,14 +63,20 @@ jobs:
           gcc --version
           aarch64-linux-gnu-gcc --version
           make --version
-          
+          ccache --version
+
       - name: Build kernel
         run: |
           chmod +x kernel_build.sh
           PROJECT="${{ github.event.inputs.project }}" ./kernel_build.sh
         env:
           MAKEFLAGS: '-j4'  # Adjust for runner's CPU count
+          CC: 'ccache gcc'
+          CXX: 'ccache g++'
 
+      - name: Display ccache statistics
+        if: always()
+        run: ccache -s
 
       - name: Upload kernel image
         if: always()
@@ -67,7 +85,6 @@ jobs:
           name: kernel-image
           path: out/target/product/${{ github.event.inputs.project }}/obj/KERNEL_OBJ/arch/arm64/boot/Image
           retention-days: 30
-
 
       - name: Upload build logs
         if: failure()
